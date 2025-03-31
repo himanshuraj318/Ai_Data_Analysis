@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CSV Analysis Tool</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #e6e7de;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h1 { color: #2c3e50; text-align: center; margin: 0; }
+        h3 { color: #34495e; margin: 10px 0 5px; }
+        #chat-box {
+            border: 1px solid #d1d8e0;
+            padding: 15px;
+            height: 400px;
+            overflow-y: scroll;
+            background-color: #f9fafc;
+            border-radius: 5px;
+            width: 100%;
+        }
+        .chat-entry {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .question { font-weight: bold; color: #000305; }
+        .answer { color: #141414; }
+        .chat-image { max-width: 100%; height: auto; margin-top: 10px; border-radius: 5px; }
+        .controls {
+            width: 100%;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #d1d8e0;
+            border-radius: 5px;
+            gap: 15px;
+        }
+        .input-group, .plot-group, .download-group, .vlookup-group, .type-group {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .file-upload-btn, .ask-btn {
+            padding: 8px;
+            background-color: #00060a;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+        }
+        .file-upload-btn:hover, .ask-btn:hover { background-color: #32393d; }
+        #fileInput { display: none; }
+        #queryInput, #xColumn, #yColumns, #sheetName, #vlookupSheet1, #vlookupSheet2, #vlookupKey, #vlookupValue, #vlookupNewCol, #typeColumn {
+            padding: 8px;
+            border: 0px solid #d1d8e0;
+            border-radius: 0px;
+            background-color: #fff;
+            color: #333;
+            flex-grow: 1;
+        }
+        #sheetName { width: 150px; }
+        select {
+            padding: 8px;
+            border: 0px solid #d1d8e0;
+            border-radius: 0px;
+            background-color: #fff;
+            color: #333;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #00060a;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #32393d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CSV Analysis Tool</h1>
+        <h3>Let's Go</h3>
+        <div id="chat-box"></div>
+        <div class="controls">
+            <div class="input-group">
+                <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">
+                    <i class="fas fa-upload"></i>
+                </button>
+                <input type="file" id="fileInput" onchange="uploadFile()">
+                <input type="text" id="sheetName" placeholder="Sheet name (optional for .xlsx)">
+                <input type="text" id="queryInput" placeholder="Ask a question or operation (e.g., SUM(column) AS new_col)">
+                <button class="ask-btn" onclick="clearHistory()">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <button onclick="askQuestion()">Ask / Aggregate</button>
+            <div class="plot-group">
+                <input type="text" id="xColumn" placeholder="X Column">
+                <input type="text" id="yColumns" placeholder="Y Columns (comma-separated)">
+                <select id="plotType">
+                    <option value="scatter">Scatter</option>
+                    <option value="line">Line</option>
+                    <option value="bar">Bar</option>
+                    <option value="pie">Pie</option>
+                    <option value="histogram">Histogram</option>
+                </select>
+                <button onclick="plotGraph()">Plot</button>
+            </div>
+            <div class="vlookup-group">
+                <input type="text" id="vlookupSheet1" placeholder="Sheet 1">
+                <input type="text" id="vlookupSheet2" placeholder="Sheet 2">
+                <input type="text" id="vlookupKey" placeholder="Key Column">
+                <input type="text" id="vlookupValue" placeholder="Value Column">
+                <input type="text" id="vlookupNewCol" placeholder="New Column Name">
+                <button onclick="performVlookup()">VLOOKUP</button>
+            </div>
+            <div class="type-group">
+                <input type="text" id="typeColumn" placeholder="Column to Change">
+                <select id="typeSelect">
+                    <option value="float">Float</option>
+                    <option value="double">Double</option>
+                </select>
+                <button onclick="changeType()">Change Type</button>
+            </div>
+            <div class="download-group">
+                <button onclick="downloadFile('csv')">Download CSV</button>
+                <button onclick="downloadFile('excel')">Download Excel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Base URL for API calls (update this for Render deployment)
+        const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? 'http://127.0.0.1:8000' 
+            : 'https://your-app.onrender.com'; // Replace with your Render URL
+
+        async function uploadFile() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            const sheetName = document.getElementById('sheetName').value.trim();
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const url = new URL(`${BASE_URL}/upload/`);
+                if (sheetName) url.searchParams.append('sheet_name', sheetName);
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                console.log('Upload response:', data);
+                await updateChatHistory();
+                if (data.sheets.length > 1) {
+                    alert(`Sheets available: ${data.sheets.join(', ')}`);
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Upload error: ' + error.message);
+            }
+        }
+
+        async function askQuestion() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) return;
+            
+            const funcMatch = query.match(/(\w+)\((.*?)\)(?:\s+as\s+(\w+))?(?:,\s*(\w+))?/i);
+            if (funcMatch) {
+                const [, funcName, args, resultCol, aggType] = funcMatch;
+                const operation = resultCol ? `${funcName}(${args}) AS ${resultCol}` : `${funcName}(${args})`;
+                const aggregateType = aggType || "none";
+                
+                try {
+                    const response = await fetch(`${BASE_URL}/aggregate/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ operation, aggregate_type: aggregateType })
+                    });
+                    if (!response.ok) throw new Error(await response.text());
+                    console.log('Aggregate response:', await response.json());
+                    await updateChatHistory();
+                } catch (error) {
+                    console.error('Aggregate error:', error);
+                    alert('Error performing operation: ' + error.message);
+                }
+            } else {
+                try {
+                    const response = await fetch(`${BASE_URL}/ask/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question: query })
+                    });
+                    if (!response.ok) throw new Error(await response.text());
+                    console.log('Ask response:', await response.json());
+                    await updateChatHistory();
+                } catch (error) {
+                    console.error('Ask error:', error);
+                    alert('Error asking question: ' + error.message);
+                }
+            }
+            document.getElementById('queryInput').value = ''; // Clear input after submission
+        }
+
+        async function plotGraph() {
+            const x = document.getElementById('xColumn').value.trim();
+            const yColumns = document.getElementById('yColumns').value.split(',').map(col => col.trim()).filter(col => col);
+            const plotType = document.getElementById('plotType').value;
+            
+            if (!x) {
+                alert('Please enter an X Column.');
+                return;
+            }
+            if (['scatter', 'line', 'bar'].includes(plotType) && !yColumns.length) {
+                alert(`${plotType.charAt(0).toUpperCase() + plotType.slice(1)} plot requires at least one Y Column.`);
+                return;
+            }
+            
+            try {
+                const url = new URL(`${BASE_URL}/plot/`);
+                url.searchParams.append('x', x);
+                url.searchParams.append('plot_type', plotType);
+                yColumns.forEach(col => url.searchParams.append('y_columns', col));
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                console.log('Plot response:', data);
+                await updateChatHistory();
+            } catch (error) {
+                console.error('Plot error:', error);
+                alert('Error generating plot: ' + error.message);
+            }
+        }
+
+        async function performVlookup() {
+            const sheet1 = document.getElementById('vlookupSheet1').value.trim();
+            const sheet2 = document.getElementById('vlookupSheet2').value.trim();
+            const key = document.getElementById('vlookupKey').value.trim();
+            const value = document.getElementById('vlookupValue').value.trim();
+            const newCol = document.getElementById('vlookupNewCol').value.trim();
+            
+            if (!sheet1 || !sheet2 || !key || !value || !newCol) {
+                alert('Please fill all VLOOKUP fields.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${BASE_URL}/vlookup/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sheet1,
+                        sheet2,
+                        key_column: key,
+                        value_column: value,
+                        new_column_name: newCol
+                    })
+                });
+                if (!response.ok) throw new Error(await response.text());
+                console.log('VLOOKUP response:', await response.json());
+                await updateChatHistory();
+            } catch (error) {
+                console.error('VLOOKUP error:', error);
+                alert('Error performing VLOOKUP: ' + error.message);
+            }
+        }
+
+        async function changeType() {
+            const column = document.getElementById('typeColumn').value.trim();
+            const newType = document.getElementById('typeSelect').value;
+            
+            if (!column) {
+                alert('Please enter a column name.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${BASE_URL}/change-type/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ column, new_type: newType })
+                });
+                if (!response.ok) throw new Error(await response.text());
+                console.log('Change type response:', await response.json());
+                await updateChatHistory();
+            } catch (error) {
+                console.error('Change type error:', error);
+                alert('Error changing type: ' + error.message);
+            }
+        }
+
+        async function downloadFile(fileType) {
+            try {
+                const response = await fetch(`${BASE_URL}/download/?file_type=${fileType}`);
+                if (!response.ok) throw new Error(await response.text());
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `modified_data.${fileType}`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                await updateChatHistory();
+            } catch (error) {
+                console.error('Download error:', error);
+                alert('Download error: ' + error.message);
+            }
+        }
+
+        async function clearHistory() {
+            try {
+                const response = await fetch(`${BASE_URL}/clear-history/`, { method: 'POST' });
+                if (!response.ok) throw new Error(await response.text());
+                console.log('Clear history response:', await response.json());
+                await updateChatHistory();
+            } catch (error) {
+                console.error('Clear history error:', error);
+                alert('Error clearing history: ' + error.message);
+            }
+        }
+
+        async function updateChatHistory() {
+            try {
+                const response = await fetch(`${BASE_URL}/chat-history/`);
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                const chatBox = document.getElementById('chat-box');
+                chatBox.innerHTML = '';
+                if (data.chat_history && Array.isArray(data.chat_history)) {
+                    data.chat_history.forEach(entry => {
+                        let html = `
+                            <div class="chat-entry">
+                                <div class="question">Q: ${entry.question || 'No question'}</div>
+                                <div class="answer">A: ${entry.answer || 'No answer'}</div>
+                        `;
+                        if (entry.image) {
+                            html += `<img class="chat-image" src="${entry.image}" alt="Generated Plot">`;
+                        }
+                        html += `</div>`;
+                        chatBox.innerHTML += html;
+                    });
+                } else {
+                    chatBox.innerHTML = '<div>No chat history available</div>';
+                }
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (error) {
+                console.error('Update chat history error:', error);
+                document.getElementById('chat-box').innerHTML = '<div>Error loading chat history</div>';
+            }
+        }
+
+        window.onload = updateChatHistory;
+    </script>
+</body>
+</html>
